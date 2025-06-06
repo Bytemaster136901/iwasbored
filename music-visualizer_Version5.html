@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Music Visualizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <style>
+    html, body {
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui,sans-serif;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #controls {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      background: #171822e6;
+      padding: 13px 9px 8px 13px;
+      border-radius: 13px;
+      z-index: 10;
+      box-shadow: 0 4px 24px #000c;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4em;
+      font-size: 1.08em;
+      max-width: 97vw;
+    }
+    #controls input[type=file] {
+      color: #eee;
+      background: #161b22;
+      border: none;
+      border-radius: 5px;
+      padding: 4px 6px;
+      width: 150px;
+      font-size: 1em;
+      max-width: 80vw;
+    }
+    #controls label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 3px;
+      color: #6fd3ff;
+      font-size: 1em;
+    }
+    #vis-mode {
+      font-size: 1em;
+      padding: 3px 12px;
+      border-radius: 6px;
+      background: #161b22;
+      color: #fff;
+      border: 1.5px solid #6fd3ff;
+      margin-left: 4px;
+      max-width: 90vw;
+    }
+    #canvas {
+      display: block;
+      background: #111;
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      left: 0; top: 0;
+      touch-action: none;
+    }
+    #music-controls {
+      margin-top: 0.5em;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1em;
+      align-items: center;
+      max-width: 98vw;
+    }
+    #music-controls button {
+      font-size: 1.13em;
+      background: #191c27;
+      border: 1.5px solid #6fd3ff;
+      color: #6fd3ff;
+      border-radius: 7px;
+      padding: 3px 13px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      min-width: 48px;
+    }
+    #music-controls button:active {
+      background: #6fd3ff;
+      color: #191c27;
+    }
+    #music-controls input[type=range] {
+      width: 90px;
+      accent-color: #6fd3ff;
+      vertical-align: middle;
+      max-width: 40vw;
+    }
+    #curTime, #duration {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.98em;
+    }
+    #filter-controls {
+      margin-top: 0.5em;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7em;
+      align-items: center;
+      background: #10131bcc;
+      border-radius: 7px;
+      padding: 6px 8px 3px 8px;
+    }
+    #filter-controls label {
+      margin-bottom: 0;
+      color: #6fd3ff;
+      font-weight: normal;
+      font-size: 0.99em;
+      margin-right: 4px;
+    }
+    #filter-controls select, 
+    #filter-controls input[type=number], 
+    #filter-controls input[type=range] {
+      font-size: 0.98em;
+      padding: 3px 8px;
+      border-radius: 5px;
+      background: #161b22;
+      color: #fff;
+      border: 1.2px solid #6fd3ff;
+      margin-left: 3px;
+      margin-right: 10px;
+      max-width: 93vw;
+      vertical-align: middle;
+    }
+    #filter-controls .slider-label {
+      min-width: 48px;
+      display: inline-block;
+      font-size: 0.93em;
+      color: #8fcbfd;
+      margin-left: 1px;
+      margin-right: 1px;
+    }
+    #filter-controls .slider-value {
+      min-width: 36px;
+      display: inline-block;
+      font-size: 0.95em;
+      color: #d0eaff;
+      margin-left: 1px;
+      margin-right: 6px;
+      text-align: right;
+    }
+    #filter-controls .fx-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      flex-wrap: wrap;
+      margin-bottom: 2px;
+    }
+    @media (max-width: 700px) {
+      #controls { left: 2px; top: 2px; padding: 7px 2px 4px 7px; font-size: 0.95em;}
+      #controls input[type=file] { width: 90px;}
+      #vis-mode { font-size: 0.98em; max-width: 60vw;}
+      #music-controls input[type=range] { width: 55px;}
+      #music-controls button { min-width: 36px; font-size: 1em;}
+      #filter-controls { gap: 0.3em; padding: 4px 3px;}
+      #filter-controls select, #filter-controls input[type=number] { font-size: 0.91em; }
+      #filter-controls .slider-label { min-width: 40px; font-size: 0.91em;}
+      #filter-controls .slider-value { min-width: 28px; font-size: .92em;}
+    }
+    @media (max-width: 430px) {
+      #controls { font-size: 0.9em; }
+      #controls input[type=file] { width: 70px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="controls">
+    <div>
+      <label for="music-inp">Pick Music</label>
+      <input type="file" id="music-inp" accept="audio/*">
+    </div>
+    <div>
+      <label for="vis-mode">Visualizer</label>
+      <select id="vis-mode">
+        <option value="waveform">Waveform</option>
+        <option value="circle-lines">Dubstep Circle (Lines)</option>
+        <option value="circle-wave">Dubstep Circle (Wave)</option>
+      </select>
+    </div>
+    <div id="music-controls">
+      <button id="play-btn" title="Play/Pause">▶️</button>
+      <input id="seek" type="range" min="0" max="1000" value="0">
+      <span id="curTime">0:00</span>
+      /
+      <span id="duration">0:00</span>
+      <input id="volume" type="range" min="0" max="1" step="0.01" value="1" title="Volume">
+    </div>
+    <div id="filter-controls">
+      <label for="effect-type">FX:</label>
+      <select id="effect-type">
+        <option value="none">None</option>
+        <option value="reverb">Reverb</option>
+        <option value="chorus">Chorus Ensemble (Basic)</option>
+        <option value="stchorus">Stereo Chorus</option>
+        <option value="overdrive">BL Driver</option>
+        <option value="gtramp">Guitar Amp</option>
+        <option value="pitchshifter">Pitch Shifter</option>
+        <option value="freqshifter">Frequency Shifter</option>
+      </select>
+      <span id="fx-sliders"></span>
+    </div>
+  </div>
+  <audio id="audio" crossorigin="anonymous"></audio>
+  <script>
+    // --- Canvas Setup ---
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let W = window.innerWidth, H = window.innerHeight;
+    function resize() {
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = W * window.devicePixelRatio;
+      canvas.height = H * window.devicePixelRatio;
+      canvas.style.width = W + "px";
+      canvas.style.height = H + "px";
+      ctx.setTransform(window.devicePixelRatio,0,0,window.devicePixelRatio,0,0);
+    }
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', () => setTimeout(resize, 400));
+    resize();
+
+    // --- Audio Setup ---
+    const audio = document.getElementById('audio');
+    const musicInp = document.getElementById('music-inp');
+    let audioCtx, src, analyser, dataArray, freqArray, animationId, bufferLen;
+    let visMode = 'waveform';
+
+    // --- FX Parameters (mobile-friendly sliders) ---
+    // Defaults
+    let fxParams = {
+      reverb:    {mix:0.5, tone:0.7, size:0.7},
+      chorus:    {amount:0.5, depth:0.5, speed:0.5, bass:0.5, treble:0.5},
+      stchorus:  {amount:0.5, depth:0.5, speed:0.5, bass:0.5, treble:0.5},
+      overdrive: {drive:0.5},
+      gtramp:    {drive:0.5},
+      pitchshifter: {semitones:0},
+      freqshifter: {freq:440}
+    };
+    let effectType = "none";
+    let effectNode, dryNode, wetNode, gainNode;
+    let chorusLfo, chorusLfoGain, stchorusLfos = [];
+    const fxSliders = document.getElementById('fx-sliders');
+
+    function setFXSliders(effect) {
+      fxSliders.innerHTML = "";
+      let html = "";
+
+      function slider(id, min, max, step, value, label, unit, percent) {
+        return `<div class="fx-row"><span class="slider-label">${label}</span>
+          <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" 
+            id="fx-${id}" style="width:70px;max-width:28vw;">
+          <span class="slider-value" id="fxv-${id}">${percent ? Math.round(value*100)+"%" : unit ? value+unit : value}</span>
+          </div>`;
+      }
+      if (effect === "reverb") {
+        html += slider("mix", 0, 1, 0.01, fxParams.reverb.mix, "Mix", "%", true);
+        html += slider("tone", 0, 1, 0.01, fxParams.reverb.tone, "Tone", "%", true);
+        html += slider("size", 0, 1, 0.01, fxParams.reverb.size, "Size", "%", true);
+      }
+      if (effect === "chorus" || effect === "stchorus") {
+        html += slider("amount", 0, 10, 0.01, fxParams[effect].amount, "Amount", "", false);
+        html += slider("depth", 0, 10, 0.01, fxParams[effect].depth, "Depth", "", false);
+        html += slider("speed", 0, 10, 0.01, fxParams[effect].speed, "Speed", "", false);
+        html += slider("bass", 0, 10, 0.01, fxParams[effect].bass, "Bass", "", false);
+        html += slider("treble", 0, 10, 0.01, fxParams[effect].treble, "Treble", "", false);
+      }
+      if (effect === "overdrive") {
+        html += slider("drive", 0, 1, 0.01, fxParams.overdrive.drive, "Drive", "", false);
+      }
+      if (effect === "gtramp") {
+        html += slider("drive", 0, 2, 0.01, fxParams.gtramp.drive, "Drive", "", false);
+      }
+      if (effect === "pitchshifter") {
+        html += `<div class="fx-row"><span class="slider-label">Pitch</span>
+          <input type="range" min="-12" max="12" step="0.01" value="${fxParams.pitchshifter.semitones}" id="fx-pitch" style="width:70px;max-width:28vw;">
+          <span class="slider-value" id="fxv-pitch">${fxParams.pitchshifter.semitones}st</span></div>`;
+      }
+      if (effect === "freqshifter") {
+        html += `<div class="fx-row"><span class="slider-label">Freq</span>
+          <input type="range" min="0" max="32000" step="1" value="${fxParams.freqshifter.freq}" id="fx-freq" style="width:90px;max-width:32vw;">
+          <span class="slider-value" id="fxv-freq">${fxParams.freqshifter.freq}Hz</span></div>`;
+      }
+      fxSliders.innerHTML = html;
+
+      // Add listeners
+      if (effect === "reverb") {
+        ["mix","tone","size"].forEach(id=>{
+          document.getElementById("fx-"+id).addEventListener('input',function(){
+            fxParams.reverb[id] = parseFloat(this.value);
+            document.getElementById("fxv-"+id).textContent = Math.round(this.value*100)+"%";
+            if (audioCtx && src) connectFXChain();
+          });
+        });
+      }
+      if (effect === "chorus" || effect === "stchorus") {
+        ["amount","depth","speed","bass","treble"].forEach(id=>{
+          document.getElementById("fx-"+id).addEventListener('input',function(){
+            fxParams[effect][id] = parseFloat(this.value);
+            document.getElementById("fxv-"+id).textContent = this.value;
+            if (audioCtx && src) connectFXChain();
+          });
+        });
+      }
+      if (effect === "overdrive") {
+        document.getElementById("fx-drive").addEventListener('input',function(){
+          fxParams.overdrive.drive = parseFloat(this.value);
+          document.getElementById("fxv-drive").textContent = this.value;
+          if (audioCtx && src) connectFXChain();
+        });
+      }
+      if (effect === "gtramp") {
+        document.getElementById("fx-drive").addEventListener('input',function(){
+          fxParams.gtramp.drive = parseFloat(this.value);
+          document.getElementById("fxv-drive").textContent = this.value;
+          if (audioCtx && src) connectFXChain();
+        });
+      }
+      if (effect === "pitchshifter") {
+        document.getElementById("fx-pitch").addEventListener('input',function(){
+          fxParams.pitchshifter.semitones = parseFloat(this.value);
+          document.getElementById("fxv-pitch").textContent = this.value + "st";
+          if (audioCtx && src) connectFXChain();
+        });
+      }
+      if (effect === "freqshifter") {
+        document.getElementById("fx-freq").addEventListener('input',function(){
+          fxParams.freqshifter.freq = parseFloat(this.value);
+          document.getElementById("fxv-freq").textContent = this.value + "Hz";
+          if (audioCtx && src) connectFXChain();
+        });
+      }
+    }
+
+    // --- FX Nodes ---
+    function makeImpulseResponse(audioCtx, duration, decay) {
+      let rate = audioCtx.sampleRate;
+      let length = rate * duration;
+      let impulse = audioCtx.createBuffer(2, length, rate);
+      for (let c=0; c<2; ++c) {
+        let ch = impulse.getChannelData(c);
+        for (let i=0; i<length; ++i) {
+          ch[i] = (Math.random()*2-1)*Math.pow(1-i/length, decay);
+        }
+      }
+      return impulse;
+    }
+    function connectFXChain() {
+      if (!audioCtx) return;
+      if (src) src.disconnect();
+      if (effectNode && effectNode.disconnect) effectNode.disconnect();
+      if (analyser) analyser.disconnect();
+      if (dryNode) dryNode.disconnect();
+      if (wetNode) wetNode.disconnect();
+      if (gainNode) gainNode.disconnect();
+      // Remove oscillators if present
+      if (chorusLfo && chorusLfo.stop) try { chorusLfo.stop(); } catch {}
+      if (stchorusLfos.length) stchorusLfos.forEach(lfo=>{if (lfo.stop) try { lfo.stop(); } catch {}});
+      stchorusLfos = [];
+
+      dryNode = audioCtx.createGain();
+      wetNode = audioCtx.createGain();
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 1.0;
+
+      switch(effectType) {
+        case "reverb": {
+          effectNode = audioCtx.createConvolver();
+          // Reverb size: 0.1s (0%) to 5s (100%) - scale
+          let size = 0.1 + fxParams.reverb.size*4.9;
+          // Tone: 0%-100% => simple lowpass on wet
+          let tone = Math.max(400, 18000 * fxParams.reverb.tone);
+          effectNode.buffer = makeImpulseResponse(audioCtx, size, 2.6);
+          // Wet/dry mix: 0%-100%
+          dryNode.gain.value = 1.0 - fxParams.reverb.mix;
+          wetNode.gain.value = fxParams.reverb.mix;
+          // Tone filter on wet
+          let lp = audioCtx.createBiquadFilter();
+          lp.type = "lowpass";
+          lp.frequency.value = tone;
+          effectNode.connect(lp).connect(wetNode);
+          break;
+        }
+        case "chorus":
+        case "stchorus": {
+          // Basic chorus: modulated delay line(s)
+          let amount = fxParams[effectType].amount; // 0-10
+          let depth = fxParams[effectType].depth/10; // 0-1
+          let speed = fxParams[effectType].speed; // 0-10 Hz
+          let bass = (fxParams[effectType].bass/10)*1000 + 60; // 60-1060Hz
+          let treble = (fxParams[effectType].treble/10)*8000 + 1000; // 1k-9kHz
+          if (effectType === "chorus") {
+            let delay = audioCtx.createDelay();
+            let lfo = audioCtx.createOscillator();
+            let lfoGain = audioCtx.createGain();
+            delay.delayTime.value = 0.01 + 0.03*amount/10;
+            lfo.frequency.value = 0.1 + 2.5*speed/10;
+            lfoGain.gain.value = 0.002 + 0.02*depth;
+            lfo.connect(lfoGain).connect(delay.delayTime);
+            lfo.start();
+            chorusLfo = lfo;
+            // Bass and treble eq
+            let bassEQ = audioCtx.createBiquadFilter();
+            bassEQ.type = "lowshelf";
+            bassEQ.frequency.value = bass;
+            bassEQ.gain.value = 5*depth;
+            let trebleEQ = audioCtx.createBiquadFilter();
+            trebleEQ.type = "highshelf";
+            trebleEQ.frequency.value = treble;
+            trebleEQ.gain.value = 2*depth;
+            effectNode = audioCtx.createGain();
+            src.connect(delay).connect(bassEQ).connect(trebleEQ).connect(effectNode);
+            dryNode.gain.value = 1.0 - Math.min(0.2+amount/10, 0.85);
+            wetNode.gain.value = Math.min(0.2+amount/10, 0.85);
+          } else {
+            // Stereo: two LFO delay lines, stereo out
+            let merger = audioCtx.createChannelMerger(2);
+            let delayL = audioCtx.createDelay();
+            let delayR = audioCtx.createDelay();
+            let lfoL = audioCtx.createOscillator();
+            let lfoR = audioCtx.createOscillator();
+            let lfoLGain = audioCtx.createGain();
+            let lfoRGain = audioCtx.createGain();
+            delayL.delayTime.value = 0.01 + 0.03*amount/10;
+            delayR.delayTime.value = 0.015 + 0.03*amount/10;
+            lfoL.frequency.value = 0.07 + 2.3*speed/10;
+            lfoR.frequency.value = 0.12 + 2.8*speed/10;
+            lfoLGain.gain.value = 0.002 + 0.02*depth;
+            lfoRGain.gain.value = 0.002 + 0.02*depth;
+            lfoL.connect(lfoLGain).connect(delayL.delayTime);
+            lfoR.connect(lfoRGain).connect(delayR.delayTime);
+            lfoL.start(); lfoR.start();
+            stchorusLfos = [lfoL, lfoR];
+            let splitter = audioCtx.createChannelSplitter(2);
+            let bassEQ = audioCtx.createBiquadFilter();
+            bassEQ.type = "lowshelf";
+            bassEQ.frequency.value = bass;
+            bassEQ.gain.value = 4*depth;
+            let trebleEQ = audioCtx.createBiquadFilter();
+            trebleEQ.type = "highshelf";
+            trebleEQ.frequency.value = treble;
+            trebleEQ.gain.value = 2*depth;
+            effectNode = { input: splitter, output: merger };
+            src.connect(splitter);
+            splitter.connect(delayL,0); splitter.connect(delayR,1);
+            delayL.connect(bassEQ).connect(trebleEQ).connect(merger,0,0);
+            delayR.connect(bassEQ).connect(trebleEQ).connect(merger,0,1);
+            dryNode.gain.value = 1.0 - Math.min(0.3+amount/10, 0.85);
+            wetNode.gain.value = Math.min(0.3+amount/10, 0.85);
+          }
+          break;
+        }
+        case "overdrive": { // BL Driver (soft clip)
+          let shaper = audioCtx.createWaveShaper();
+          let drive = 1 + fxParams.overdrive.drive*24;
+          let curve = new Float32Array(44100);
+          for (let i=0; i<44100; ++i) {
+            let x = i/22050-1;
+            curve[i] = Math.tanh(drive*x);
+          }
+          shaper.curve = curve; shaper.oversample="4x";
+          effectNode = shaper;
+          dryNode.gain.value = 1.0 - fxParams.overdrive.drive*0.9;
+          wetNode.gain.value = Math.max(0.2, fxParams.overdrive.drive);
+          break;
+        }
+        case "gtramp": { // Guitar amp: soft clip, more drive
+          let shaper = audioCtx.createWaveShaper();
+          let drive = 1 + fxParams.gtramp.drive*48;
+          let curve = new Float32Array(44100);
+          for (let i=0; i<44100; ++i) {
+            let x = i/22050-1;
+            curve[i] = Math.tanh(drive*x);
+          }
+          shaper.curve = curve; shaper.oversample="4x";
+          effectNode = shaper;
+          dryNode.gain.value = 1.0 - fxParams.gtramp.drive*0.8;
+          wetNode.gain.value = Math.max(0.2, fxParams.gtramp.drive/2);
+          break;
+        }
+        case "pitchshifter": {
+          // HTMLMediaElement only: change playbackRate based on semitones
+          let semitones = fxParams.pitchshifter.semitones;
+          audio.playbackRate = Math.pow(2, semitones/12);
+          effectNode = audioCtx.createGain();
+          dryNode.gain.value = 1.0;
+          wetNode.gain.value = 0.0;
+          break;
+        }
+        case "freqshifter": {
+          let detuner = audioCtx.createBiquadFilter();
+          detuner.type = "allpass";
+          detuner.frequency.value = Math.max(0, Math.min(32000, fxParams.freqshifter.freq));
+          effectNode = detuner;
+          dryNode.gain.value = 0.7;
+          wetNode.gain.value = 0.7;
+          break;
+        }
+        default: {
+          effectNode = audioCtx.createGain();
+          dryNode.gain.value = 1.0;
+          wetNode.gain.value = 0.0;
+        }
+      }
+      // --- Connect graph ---
+      if (effectType === "stchorus") {
+        src.connect(effectNode.input);
+        effectNode.output.connect(wetNode);
+      } else {
+        src.connect(effectNode);
+        effectNode.connect(wetNode);
+      }
+      src.connect(dryNode);
+      dryNode.connect(gainNode);
+      wetNode.connect(gainNode);
+      gainNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+    }
+
+    // --- Music Controls ---
+    const playBtn = document.getElementById('play-btn');
+    const seek = document.getElementById('seek');
+    const curTime = document.getElementById('curTime');
+    const duration = document.getElementById('duration');
+    const volume = document.getElementById('volume');
+    let seeking = false;
+
+    // --- Mobile autoplay unlock ---
+    let userInteracted = false;
+    function unlockAudioCtx() {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+    function firstUserInteraction() {
+      if (!userInteracted) {
+        userInteracted = true;
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      }
+    }
+    window.addEventListener('touchstart', firstUserInteraction, {passive:true});
+    window.addEventListener('mousedown', firstUserInteraction);
+
+    // --- Load Music File ---
+    musicInp.addEventListener('change', function(e) {
+      if (!e.target.files.length) return;
+      let file = e.target.files[0];
+      let url = URL.createObjectURL(file);
+      audio.src = url;
+      audio.load();
+      playBtn.textContent = "▶️";
+      setTimeout(()=>{ updateDuration(); }, 600);
+      audio.pause();
+      if (audioCtx) {
+        audioCtx.close();
+        audioCtx = null;
+        src = null;
+        analyser = null;
+      }
+    });
+
+    // --- Play/Pause ---
+    playBtn.onclick = function() {
+      if (!audio.src) return;
+      if (audio.paused) {
+        audio.play();
+      } else {
+        audio.pause();
+      }
+    };
+
+    // Update play/pause button text on events
+    audio.addEventListener('play', ()=>{
+      playBtn.textContent = "⏸️";
+      if (!audioCtx) startVis();
+      else if (audioCtx.state === "suspended") audioCtx.resume();
+      draw();
+    });
+    audio.addEventListener('pause', ()=>{
+      playBtn.textContent = "▶️";
+      stopVis();
+    });
+    audio.addEventListener('ended', ()=>{
+      playBtn.textContent = "▶️";
+      stopVis();
+    });
+
+    // --- Seek Bar ---
+    function updateSeekBar() {
+      if (!audio.duration) return;
+      if (!seeking) seek.value = Math.floor(audio.currentTime / audio.duration * 1000);
+      curTime.textContent = sec2str(audio.currentTime);
+      duration.textContent = sec2str(audio.duration);
+    }
+    seek.addEventListener('input', ()=>{
+      seeking = true;
+    });
+    seek.addEventListener('change', ()=>{
+      if (audio.duration) {
+        audio.currentTime = seek.value / 1000 * audio.duration;
+      }
+      seeking = false;
+    });
+    audio.addEventListener('timeupdate', updateSeekBar);
+    audio.addEventListener('loadedmetadata', updateSeekBar);
+
+    function updateDuration() {
+      duration.textContent = sec2str(audio.duration);
+      curTime.textContent = sec2str(audio.currentTime);
+    }
+
+    // --- Volume ---
+    volume.addEventListener('input', ()=>{
+      audio.volume = volume.value;
+    });
+
+    // --- Visualizer Mode Switch ---
+    document.getElementById('vis-mode').addEventListener('change', function() {
+      visMode = this.value;
+    });
+
+    // --- FX Filter UI ---
+    const effectTypeSel = document.getElementById('effect-type');
+    effectTypeSel.addEventListener('change', function() {
+      effectType = this.value;
+      setFXSliders(effectType);
+      if (audioCtx && src) connectFXChain();
+    });
+    setFXSliders("none");
+
+    // --- Visualization ---
+    function startVis() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        src = audioCtx.createMediaElementSource(audio);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        bufferLen = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLen);
+        freqArray = new Uint8Array(bufferLen);
+      }
+      connectFXChain();
+      draw();
+    }
+
+    function stopVis() {
+      cancelAnimationFrame(animationId);
+      ctx.clearRect(0,0,W,H);
+      // Do not suspend audioCtx here, so the visualizer can resume instantly on play.
+    }
+
+    // --- Drawing Functions ---
+    function draw() {
+      animationId = requestAnimationFrame(draw);
+      ctx.clearRect(0,0,W,H);
+      if (!analyser) return;
+      if (visMode === "waveform") {
+        analyser.getByteTimeDomainData(dataArray);
+        ctx.save();
+        ctx.strokeStyle = "#6fd3ff";
+        ctx.lineWidth = Math.max(1.5, W/800*2.2);
+        ctx.beginPath();
+        let mid = H/2;
+        for (let i=0; i<bufferLen; i++) {
+          let v = (dataArray[i] - 128) / 128;
+          let x = i / bufferLen * W;
+          let y = mid + v * (H/2-30);
+          if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+      else if (visMode === "circle-lines" || visMode === "circle-wave") {
+        analyser.getByteFrequencyData(freqArray);
+        let N = Math.floor(Math.max(64, Math.min(160, W/7))); // Adapt lines to screen size
+        let R = Math.max(60, Math.min(W,H)*0.22);
+        let cx = W/2, cy = H/2;
+        ctx.save();
+        ctx.translate(cx,cy);
+        // Draw base circle
+        ctx.beginPath();
+        ctx.arc(0,0,R,0,2*Math.PI);
+        ctx.strokeStyle="#222";
+        ctx.lineWidth = Math.max(5, W/150);
+        ctx.stroke();
+        // Lines
+        if (visMode === "circle-lines") {
+          for (let i=0; i<N; ++i) {
+            let angle = (i/N)*2*Math.PI;
+            let amp = freqArray[Math.floor(i*bufferLen/N)]/255;
+            let len = R*0.5 + amp*R*0.8;
+            ctx.save();
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(0, -R*0.93);
+            ctx.lineTo(0, -R*0.93 - len);
+            ctx.strokeStyle = `hsl(${angle*180/Math.PI},80%,60%)`;
+            ctx.lineWidth = 3 + amp*6;
+            ctx.shadowColor = `hsl(${angle*180/Math.PI},80%,60%)`;
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.restore();
+          }
+        } else { // circle-wave
+          ctx.save();
+          ctx.rotate(-Math.PI/2);
+          ctx.beginPath();
+          for (let i=0; i<=N; ++i) {
+            let angle = (i/N)*2*Math.PI;
+            let amp = freqArray[Math.floor(i*bufferLen/N)]/255;
+            let r = R + amp*R*0.7;
+            let x = Math.cos(angle)*r, y = Math.sin(angle)*r;
+            if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+          }
+          ctx.closePath();
+          ctx.strokeStyle = "#6fd3ff";
+          ctx.lineWidth = Math.max(5, W/160*7);
+          ctx.shadowColor = "#6fd3ff88";
+          ctx.shadowBlur = 11;
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+    }
+
+    // --- Helper ---
+    function sec2str(s) {
+      s = Math.floor(s||0);
+      let m = Math.floor(s/60);
+      let ss = (s%60).toString().padStart(2,'0');
+      return `${m}:${ss}`;
+    }
+
+    // --- Responsive on load ---
+    window.addEventListener("DOMContentLoaded", ()=>{
+      resize();
+      updateSeekBar();
+    });
+
+    // Attempt to unlock audio on user gesture for iOS/Android
+    ["touchstart","touchend","mousedown"].forEach(evt=>{
+      window.addEventListener(evt, unlockAudioCtx, {passive:true});
+    });
+  </script>
+</body>
+</html>
